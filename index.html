@@ -1,0 +1,997 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🫣 HIDEOUT — Multiplayer Hide & Seek</title>
+<script src="https://cdn.jsdelivr.net/npm/pubnub@7.4.5/dist/web/pubnub.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --primary:#7c3aed;--secondary:#06b6d4;--accent:#f59e0b;
+  --danger:#ef4444;--success:#10b981;--dark:#0f0f1a;--darker:#07070f;
+  --card:#1a1a2e;--card2:#16213e;--text:#e2e8f0;--muted:#64748b;--border:#2d2d4a;
+}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--darker);color:var(--text);min-height:100vh;overflow-x:hidden}
+.screen{display:none;min-height:100vh;padding:20px;animation:fadeIn .4s ease}
+.screen.active{display:flex;flex-direction:column;align-items:center;justify-content:center}
+@keyframes fadeIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+h1.logo{font-size:clamp(2.5rem,8vw,5rem);font-weight:900;letter-spacing:-.02em;background:linear-gradient(135deg,#7c3aed,#06b6d4,#f59e0b);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-align:center;margin-bottom:.25rem}
+.tagline{color:var(--muted);text-align:center;font-size:1.1rem;margin-bottom:2rem}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:1.5rem}
+.input{width:100%;background:#0d0d1f;border:2px solid var(--border);border-radius:10px;padding:.75rem 1rem;color:var(--text);font-size:1rem;outline:none;transition:border-color .2s}
+.input:focus{border-color:var(--primary)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;padding:.75rem 1.5rem;border-radius:12px;font-size:1rem;font-weight:700;cursor:pointer;border:none;transition:all .2s;white-space:nowrap}
+.btn-primary{background:linear-gradient(135deg,#7c3aed,#5b21b6);color:#fff}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 8px 25px rgba(124,58,237,.5)}
+.btn-secondary{background:var(--card2);color:var(--text);border:2px solid var(--border)}
+.btn-secondary:hover{border-color:var(--secondary);color:var(--secondary)}
+.btn-success{background:linear-gradient(135deg,#10b981,#059669);color:#fff}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+label{display:block;font-size:.85rem;color:var(--muted);margin-bottom:.4rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+.row{display:flex;gap:1rem;align-items:flex-start;flex-wrap:wrap}
+.col{flex:1;min-width:220px}
+.divider{display:flex;align-items:center;gap:1rem;color:var(--muted);font-size:.85rem;margin:1rem 0}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border)}
+#landing{background:radial-gradient(ellipse at top,#1a0a3e 0%,var(--darker) 60%)}
+.emoji-picker{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.5rem}
+.emoji-option{font-size:1.4rem;cursor:pointer;padding:.3rem;border-radius:8px;transition:background .15s;border:2px solid transparent}
+.emoji-option:hover,.emoji-option.selected{background:var(--card2);border-color:var(--primary)}
+#lobby{background:radial-gradient(ellipse at center,#0a1a2e 0%,var(--darker) 70%)}
+.lobby-wrap{width:100%;max-width:760px}
+.room-code-display{font-size:2.5rem;font-weight:900;letter-spacing:.2em;color:var(--accent);font-family:monospace;cursor:pointer;transition:opacity .2s}
+.room-code-display:hover{opacity:.7}
+.env-picker{display:grid;grid-template-columns:repeat(5,1fr);gap:.5rem;margin:1rem 0}
+.env-btn{background:var(--card2);border:2px solid var(--border);border-radius:12px;padding:.75rem .5rem;cursor:pointer;text-align:center;font-size:.8rem;transition:all .2s;color:var(--text)}
+.env-btn .env-icon{font-size:1.8rem;display:block;margin-bottom:.25rem}
+.env-btn:hover{border-color:var(--secondary);transform:translateY(-2px)}
+.env-btn.selected{border-color:var(--accent);background:rgba(245,158,11,.15)}
+.player-list{display:flex;flex-direction:column;gap:.5rem;max-height:320px;overflow-y:auto;padding-right:.25rem}
+.player-item{display:flex;align-items:center;gap:.75rem;background:var(--card2);border-radius:10px;padding:.6rem .9rem}
+.player-avatar{font-size:1.6rem;line-height:1}
+.player-name{font-weight:600;flex:1}
+.player-badge{font-size:.7rem;padding:.2rem .5rem;border-radius:20px;font-weight:700;text-transform:uppercase}
+.badge-host{background:rgba(245,158,11,.2);color:var(--accent)}
+.badge-me{background:rgba(124,58,237,.2);color:#a78bfa}
+.player-count{color:var(--muted);font-size:.85rem;margin-bottom:.5rem}
+#countdown{background:radial-gradient(ellipse at center,#2d0a0a 0%,var(--darker) 70%)}
+.countdown-num{font-size:10rem;font-weight:900;line-height:1;animation:countPulse .6s ease-in-out}
+@keyframes countPulse{0%{transform:scale(1.3);opacity:.5}100%{transform:scale(1);opacity:1}}
+.role-reveal{text-align:center}
+.role-badge{font-size:1.2rem;font-weight:900;padding:1rem 2.5rem;border-radius:20px;display:inline-block;margin:1rem 0;letter-spacing:.05em}
+.role-hider{background:rgba(16,185,129,.2);color:#34d399;border:2px solid #10b981}
+.role-seeker{background:rgba(239,68,68,.2);color:#f87171;border:2px solid #ef4444}
+.team-reveal{color:var(--muted);font-size:1rem;margin-top:.5rem}
+#game{background:var(--darker);padding:0}
+.game-header{width:100%;background:var(--card);border-bottom:1px solid var(--border);padding:.75rem 1.25rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;position:sticky;top:0;z-index:100}
+.timer{font-size:1.6rem;font-weight:900;font-family:monospace;color:var(--accent);min-width:5rem}
+.timer.urgent{color:var(--danger);animation:timerPulse 1s infinite}
+@keyframes timerPulse{0%,100%{opacity:1}50%{opacity:.4}}
+.found-counter{font-size:.9rem;color:var(--muted)}
+.found-counter strong{color:var(--danger)}
+.game-body{display:flex;flex:1;flex-direction:column;align-items:center;padding:1.25rem;gap:1.25rem;max-width:1100px;margin:0 auto;width:100%}
+.spots-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:.75rem;width:100%}
+.spot-card{background:var(--card2);border:2px solid var(--border);border-radius:14px;padding:1rem;cursor:pointer;text-align:center;transition:all .25s;position:relative;overflow:hidden}
+.spot-card:hover{transform:translateY(-3px);border-color:var(--secondary)}
+.spot-card.my-spot{border-color:var(--success)!important;background:rgba(16,185,129,.1)!important}
+.spot-card.investigated{border-color:var(--danger)!important;background:rgba(239,68,68,.1)!important;cursor:default}
+.spot-card.investigated:hover{transform:none}
+.spot-card.checking{animation:checking .6s ease infinite alternate}
+@keyframes checking{0%{border-color:var(--accent)}100%{border-color:var(--danger);box-shadow:0 0 20px rgba(239,68,68,.5)}}
+.spot-icon{font-size:2rem;margin-bottom:.4rem}
+.spot-name{font-weight:700;font-size:.85rem}
+.spot-desc{color:var(--muted);font-size:.72rem;margin-top:.25rem}
+.spot-badge{position:absolute;top:.5rem;right:.5rem;font-size:.65rem;padding:.15rem .4rem;border-radius:6px;font-weight:700}
+.spot-badge-hiding{background:rgba(16,185,129,.3);color:#34d399}
+.spot-badge-checked{background:rgba(239,68,68,.3);color:#f87171}
+.spot-badge-found{background:rgba(239,68,68,.5);color:#fff}
+.spot-cooldown{position:absolute;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;font-size:.85rem;font-weight:700;color:var(--accent);border-radius:12px}
+.hider-status{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:1rem 1.25rem;width:100%;display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+.your-spot-info{display:flex;align-items:center;gap:.75rem}
+.your-spot-icon{font-size:2rem}
+.your-spot-text{font-size:.9rem}
+.your-spot-name{font-weight:800;font-size:1.1rem;color:var(--success)}
+.teams-panel{width:100%;display:flex;gap:.75rem;flex-wrap:wrap}
+.team-card{flex:1;min-width:150px;background:var(--card);border:2px solid var(--border);border-radius:12px;padding:.75rem}
+.team-header{font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5rem}
+.team-members{display:flex;flex-direction:column;gap:.3rem}
+.member-row{display:flex;align-items:center;gap:.5rem;font-size:.85rem}
+.member-row .status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.dot-safe{background:var(--success)}.dot-found{background:var(--danger)}.dot-seeker{background:var(--accent)}
+.chat-panel{width:100%;background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.chat-header{padding:.6rem 1rem;border-bottom:1px solid var(--border);font-size:.8rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.chat-messages{padding:.75rem;height:140px;overflow-y:auto;display:flex;flex-direction:column;gap:.4rem}
+.chat-msg{font-size:.85rem;display:flex;gap:.5rem}
+.chat-msg .who{font-weight:700;white-space:nowrap}
+.chat-msg.system .who{color:var(--accent)}
+.chat-msg.mine .who{color:#a78bfa}
+.seeker-tip{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:10px;padding:.6rem 1rem;color:#fca5a5;font-size:.85rem;text-align:center;width:100%}
+.chat-input-row{display:flex;gap:.5rem;padding:.6rem}
+.chat-input{flex:1;background:#0d0d1f;border:1px solid var(--border);border-radius:8px;padding:.45rem .75rem;color:var(--text);font-size:.85rem;outline:none}
+.chat-input:focus{border-color:var(--primary)}
+#results{background:radial-gradient(ellipse at top,#1a0a3e 0%,var(--darker) 60%)}
+.results-wrap{width:100%;max-width:640px;text-align:center}
+.winner-banner{font-size:2.5rem;font-weight:900;margin:1rem 0;padding:1rem 2rem;border-radius:20px}
+.winner-hiders{background:rgba(16,185,129,.2);border:2px solid var(--success);color:#34d399}
+.winner-seekers{background:rgba(239,68,68,.2);border:2px solid var(--danger);color:#f87171}
+.scores-list{display:flex;flex-direction:column;gap:.5rem;margin:1.5rem 0}
+.score-row{display:flex;align-items:center;gap:1rem;background:var(--card2);border-radius:10px;padding:.7rem 1rem}
+.score-rank{font-size:1.2rem;width:2rem;text-align:center}
+.score-name{flex:1;font-weight:600}
+.score-points{font-weight:900;color:var(--accent);font-size:1.1rem;font-family:monospace}
+.score-detail{font-size:.75rem;color:var(--muted)}
+.found-flash{position:fixed;inset:0;background:rgba(239,68,68,.3);pointer-events:none;z-index:999;animation:foundFlash .6s ease forwards}
+@keyframes foundFlash{0%{opacity:1}100%{opacity:0}}
+.found-popup{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(0);background:var(--card);border:2px solid var(--danger);border-radius:20px;padding:2rem 3rem;z-index:1000;text-align:center;animation:popIn .4s cubic-bezier(.34,1.56,.64,1) forwards}
+@keyframes popIn{0%{transform:translate(-50%,-50%) scale(0)}100%{transform:translate(-50%,-50%) scale(1)}}
+.found-popup h2{font-size:2rem;color:var(--danger);margin-bottom:.5rem}
+.found-popup .found-player{font-size:3rem;margin:.5rem 0}
+#toast{position:fixed;bottom:2rem;left:50%;transform:translateX(-50%);background:#1e1e35;border:1px solid var(--border);border-radius:12px;padding:.75rem 1.5rem;font-size:.9rem;opacity:0;transition:opacity .3s;pointer-events:none;z-index:2000;white-space:nowrap}
+#toast.show{opacity:1}
+.stars{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:0}
+.star{position:absolute;background:#fff;border-radius:50%;animation:twinkle var(--d,3s) infinite alternate ease-in-out}
+@keyframes twinkle{0%{opacity:.1}100%{opacity:.8}}
+.conn-status{font-size:.75rem;padding:.25rem .6rem;border-radius:20px;font-weight:700}
+.conn-ok{background:rgba(16,185,129,.2);color:#34d399}
+.conn-wait{background:rgba(245,158,11,.2);color:var(--accent)}
+@media(max-width:600px){
+  .env-picker{grid-template-columns:repeat(3,1fr)}
+  .game-header{padding:.5rem .75rem}
+  .spots-grid{grid-template-columns:repeat(auto-fill,minmax(110px,1fr))}
+  .room-code-display{font-size:1.8rem}
+}
+</style>
+</head>
+<body>
+
+<div id="landing" class="screen active">
+  <div class="stars" id="stars"></div>
+  <div style="position:relative;z-index:1;width:100%;max-width:460px">
+    <h1 class="logo">🫣 HIDEOUT</h1>
+    <p class="tagline">Real-time multiplayer hide &amp; seek for teams</p>
+    <div class="card">
+      <div style="margin-bottom:1.25rem">
+        <label>Your Name</label>
+        <input id="playerName" class="input" placeholder="Enter your name..." maxlength="20">
+      </div>
+      <div style="margin-bottom:1.5rem">
+        <label>Pick Your Avatar</label>
+        <div class="emoji-picker" id="emojiPicker"></div>
+      </div>
+      <button class="btn btn-primary" style="width:100%;font-size:1.1rem;padding:1rem" onclick="createRoom()">
+        🎮 Create Room
+      </button>
+      <div class="divider">or join existing</div>
+      <div class="row" style="align-items:flex-end">
+        <div class="col">
+          <label>Room Code</label>
+          <input id="joinCode" class="input" placeholder="ABC123" maxlength="6" style="text-transform:uppercase;letter-spacing:.15em;font-family:monospace;font-size:1.1rem">
+        </div>
+        <button class="btn btn-secondary" onclick="joinRoom()">→ Join</button>
+      </div>
+    </div>
+    <p style="text-align:center;color:var(--muted);font-size:.75rem;margin-top:1rem">Up to 20 players · 5 unique environments · Real-time multiplayer</p>
+  </div>
+</div>
+
+<div id="lobby" class="screen">
+  <div class="lobby-wrap">
+    <div style="text-align:center;margin-bottom:1.5rem">
+      <div style="color:var(--muted);font-size:.85rem;margin-bottom:.25rem">ROOM CODE — click to copy invite link</div>
+      <div class="room-code-display" id="displayCode" onclick="copyRoomLink()">——</div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:.75rem;margin-top:.5rem;flex-wrap:wrap">
+        <button class="btn btn-secondary" style="font-size:.8rem;padding:.4rem .9rem" onclick="copyRoomLink()">📋 Copy invite link</button>
+        <span class="conn-status conn-wait" id="connStatus">⏳ Connecting…</span>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:1rem" id="hostControls">
+      <label>Choose Environment</label>
+      <div class="env-picker" id="envPicker"></div>
+    </div>
+    <div class="card" style="margin-bottom:1rem">
+      <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:.75rem">
+        <div>
+          <div style="font-weight:700;font-size:1rem">Players in Room</div>
+          <div class="player-count" id="playerCountLabel">Waiting for players...</div>
+        </div>
+        <div style="font-size:.8rem;color:var(--muted);text-align:right">Teams auto-assign<br>on game start</div>
+      </div>
+      <div class="player-list" id="playerList"></div>
+    </div>
+    <div style="display:flex;gap:.75rem;flex-wrap:wrap">
+      <button class="btn btn-success" id="startBtn" onclick="startGame()" style="flex:1;font-size:1.1rem;padding:.9rem">▶️ Start Game</button>
+      <button class="btn btn-secondary" onclick="leaveLobby()">Leave</button>
+    </div>
+    <p id="startHint" style="text-align:center;color:var(--muted);font-size:.8rem;margin-top:.75rem"></p>
+  </div>
+</div>
+
+<div id="countdown" class="screen">
+  <div class="role-reveal" id="roleReveal">
+    <div style="color:var(--muted);font-size:1rem;margin-bottom:.5rem">Game starts in</div>
+    <div class="countdown-num" id="countNum">5</div>
+    <div id="roleText"></div>
+    <div class="team-reveal" id="teamReveal"></div>
+  </div>
+</div>
+
+<div id="game" class="screen" style="justify-content:flex-start;padding:0">
+  <div class="game-header">
+    <div>
+      <div style="font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Time Left</div>
+      <div class="timer" id="timerDisplay">5:00</div>
+    </div>
+    <div id="envNameDisplay" style="font-size:1rem;font-weight:700;text-align:center;flex:1"></div>
+    <div style="text-align:right">
+      <div class="found-counter">Found: <strong id="foundCount">0</strong> / <span id="hiderCount">0</span></div>
+      <div style="font-size:.75rem;color:var(--muted)" id="myRoleLabel"></div>
+    </div>
+  </div>
+  <div class="game-body" id="gameBody"></div>
+</div>
+
+<div id="results" class="screen">
+  <div class="results-wrap">
+    <div style="font-size:3rem" id="resultsEmoji">🎉</div>
+    <h2 style="font-size:1.8rem;margin:.5rem 0" id="resultsTitle">Game Over!</h2>
+    <div class="winner-banner" id="winnerBanner"></div>
+    <div class="scores-list" id="scoresList"></div>
+    <div style="display:flex;gap:.75rem;justify-content:center;flex-wrap:wrap;margin-top:1rem">
+      <button class="btn btn-primary" onclick="playAgain()">🔄 Play Again</button>
+      <button class="btn btn-secondary" onclick="goHome()">🏠 Main Menu</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// =====================================================
+// CONSTANTS
+// =====================================================
+const EMOJIS=['😀','😎','🤩','🥷','🦊','🐱','🐸','🦁','🐺','🦋','🧙','🤖','👻','🎭','🚀','🔥','💎','⚡','🌊','🎯'];
+const TEAM_COLORS=[
+  {name:'Red Team',   color:'#ef4444',bg:'rgba(239,68,68,.15)',  dot:'#f87171'},
+  {name:'Blue Team',  color:'#3b82f6',bg:'rgba(59,130,246,.15)', dot:'#60a5fa'},
+  {name:'Green Team', color:'#10b981',bg:'rgba(16,185,129,.15)', dot:'#34d399'},
+  {name:'Purple Team',color:'#a855f7',bg:'rgba(168,85,247,.15)',dot:'#c084fc'},
+  {name:'Orange Team',color:'#f97316',bg:'rgba(249,115,22,.15)', dot:'#fb923c'},
+];
+const ENVIRONMENTS={
+  space:{name:'🚀 Space Station',theme:'space',spots:[
+    {id:'cryo',name:'Cryo Pods',icon:'🛸',desc:'Rows of sleeping chambers'},
+    {id:'engine',name:'Engine Room',icon:'⚙️',desc:'Loud and full of machinery'},
+    {id:'cargo',name:'Cargo Bay',icon:'📦',desc:'Stacked containers everywhere'},
+    {id:'bridge',name:'Command Bridge',icon:'🖥️',desc:'Control panels and screens'},
+    {id:'lab',name:'Science Lab',icon:'🔬',desc:'Equipment and specimen jars'},
+    {id:'airlock',name:'Airlock',icon:'🚪',desc:'The dangerous exterior door'},
+    {id:'vents',name:'Air Vents',icon:'💨',desc:'Crawl spaces everywhere'},
+    {id:'cafeteria',name:'Cafeteria',icon:'🍱',desc:'Food storage and tables'},
+    {id:'observation',name:'Observation Deck',icon:'🌌',desc:'Panoramic space views'},
+    {id:'maintenance',name:'Maintenance Bay',icon:'🔧',desc:'Tools and spare parts'},
+    {id:'medbay',name:'Med Bay',icon:'💉',desc:'Medical equipment and beds'},
+    {id:'armory',name:'Armory',icon:'🛡️',desc:'Secure weapons storage'},
+  ]},
+  mansion:{name:'🏰 Haunted Mansion',theme:'mansion',spots:[
+    {id:'attic',name:'The Attic',icon:'🕯️',desc:'Dusty boxes and old furniture'},
+    {id:'library',name:'Library',icon:'📚',desc:'Ancient books line the walls'},
+    {id:'cellar',name:'Wine Cellar',icon:'🍷',desc:'Dark barrels and cobwebs'},
+    {id:'ballroom',name:'Grand Ballroom',icon:'🎭',desc:'Mirrors and chandeliers'},
+    {id:'garden',name:'Hedge Maze',icon:'🌿',desc:'Overgrown and mysterious'},
+    {id:'passage',name:'Secret Passage',icon:'🗝️',desc:'Hidden behind the bookcase'},
+    {id:'kitchen',name:'Kitchen',icon:'🍖',desc:'Old stoves and pantries'},
+    {id:'bedroom',name:'Master Bedroom',icon:'🛏️',desc:'Four-poster bed and drapes'},
+    {id:'crypt',name:'Family Crypt',icon:'⚰️',desc:'Stone sarcophagi everywhere'},
+    {id:'tower',name:'Clock Tower',icon:'🕰️',desc:'Gears and mechanisms'},
+    {id:'cave',name:'Underground Cave',icon:'🦇',desc:'Bats and stalactites'},
+    {id:'trophy',name:'Trophy Room',icon:'🏆',desc:'Hunting trophies and paintings'},
+  ]},
+  ocean:{name:'🌊 Underwater Base',theme:'ocean',spots:[
+    {id:'coral',name:'Coral Cave',icon:'🪸',desc:'Beautiful and hidden'},
+    {id:'dive',name:'Dive Airlock',icon:'🤿',desc:'Entry/exit to the sea'},
+    {id:'research',name:'Research Bay',icon:'🧬',desc:'Science experiments underway'},
+    {id:'sub',name:'Submarine Bay',icon:'🚢',desc:'Docked sub and equipment'},
+    {id:'generator',name:'Generator Room',icon:'⚡',desc:'Loud and cramped'},
+    {id:'kelp',name:'Kelp Forest',icon:'🌱',desc:'Dense underwater vegetation'},
+    {id:'dome',name:'Observatory Dome',icon:'🔭',desc:'Glass dome, fish swim by'},
+    {id:'mess',name:'Mess Hall',icon:'🐟',desc:'Meal prep area'},
+    {id:'decomp',name:'Decompression Chamber',icon:'🧪',desc:'Pressure equalization room'},
+    {id:'treasure',name:'Treasure Vault',icon:'💎',desc:'Recovered artifacts'},
+    {id:'shark',name:'Shark Observation',icon:'🦈',desc:'Surrounded by apex predators'},
+    {id:'sonar',name:'Sonar Room',icon:'📡',desc:'Detection equipment'},
+  ]},
+  cyber:{name:'🌆 Cyber City',theme:'cyber',spots:[
+    {id:'neon',name:'Neon Alley',icon:'💡',desc:'Dazzling light displays'},
+    {id:'vault',name:'Data Vault',icon:'💾',desc:'Encrypted server stacks'},
+    {id:'hacker',name:'Hacker Den',icon:'💻',desc:'Dark room, screens everywhere'},
+    {id:'rooftop',name:'Rooftop',icon:'🏙️',desc:'Above the city lights'},
+    {id:'server',name:'Server Farm',icon:'🖥️',desc:'Rows of humming machines'},
+    {id:'market',name:'Black Market',icon:'🕶️',desc:'Shadowy deals happening'},
+    {id:'arcade',name:'VR Arcade',icon:'🎮',desc:'Lost in virtual reality'},
+    {id:'metro',name:'Underground Metro',icon:'🚇',desc:'Abandoned tunnel system'},
+    {id:'drone',name:'Drone Bay',icon:'🚁',desc:'Delivery drones stored here'},
+    {id:'corp',name:'Corporate Tower',icon:'🏢',desc:'Top floor boardroom'},
+    {id:'street',name:'Street Level',icon:'🛵',desc:'Lost in the crowd'},
+    {id:'cafe',name:'Dark Web Café',icon:'☕',desc:'Anonymous browsing spot'},
+  ]},
+  carnival:{name:'🎪 Carnival of Chaos',theme:'carnival',spots:[
+    {id:'funhouse',name:'Fun House',icon:'🪞',desc:'Mirrors distort everything'},
+    {id:'bigtop',name:'Big Top',icon:'🎪',desc:'Under the main circus tent'},
+    {id:'ferris',name:'Ferris Wheel',icon:'🎡',desc:'Hiding in a gondola'},
+    {id:'haunted',name:'Haunted Ride',icon:'👻',desc:'Dark spooky tunnel'},
+    {id:'food',name:'Food Court',icon:'🌭',desc:'Smells delicious'},
+    {id:'games',name:'Games Zone',icon:'🎯',desc:'Skill game stalls everywhere'},
+    {id:'backstage',name:'Backstage',icon:'🎭',desc:'Performers getting ready'},
+    {id:'tickets',name:'Ticket Booth',icon:'🎟️',desc:'Crowded entrance area'},
+    {id:'mirrors',name:'Hall of Mirrors',icon:'✨',desc:'Confusingly reflective'},
+    {id:'magic',name:'Magic Stage',icon:'🎩',desc:'Smoke and misdirection'},
+    {id:'animals',name:'Animal Pens',icon:'🦁',desc:'Noisy and smelly'},
+    {id:'storage',name:'Storage Tent',icon:'🎠',desc:'Props and equipment'},
+  ]},
+};
+const GAME_DURATION=5*60;
+const INVESTIGATE_COOLDOWN=20;
+const MAX_MOVES=2;
+
+// =====================================================
+// STATE
+// =====================================================
+const S={
+  myId:null,myName:'',myEmoji:'😀',
+  myRole:null,myTeam:-1,mySpot:null,myMoves:MAX_MOVES,
+  isHost:false,roomCode:null,
+  phase:'landing',
+  environment:'space',selectedEnv:'space',
+  players:{},teams:[],seekers:[],
+  gameEndTime:null,timerInterval:null,
+  investigatedSpots:{},foundPlayers:{},cooldowns:{},
+  chatMessages:[],pubnub:null,channel:null,
+  _heartbeat:null,_lobbyStateTimer:null,
+};
+
+// =====================================================
+// UTILS
+// =====================================================
+const uid=()=>Math.random().toString(36).slice(2,10);
+const roomCodeGen=()=>Math.random().toString(36).slice(2,8).toUpperCase();
+const $=id=>document.getElementById(id);
+function showScreen(name){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));$(name).classList.add('active');}
+function toast(msg,dur=2500){const t=$('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur);}
+function getEnv(){return ENVIRONMENTS[S.environment];}
+function spotById(id){return getEnv().spots.find(s=>s.id===id);}
+function getPlayerList(){return Object.values(S.players);}
+function getHiders(){return getPlayerList().filter(p=>p.role==='hider');}
+function getSeekers(){return getPlayerList().filter(p=>p.role==='seeker');}
+function foundCount(){return Object.keys(S.foundPlayers).length;}
+function hiderCount(){return getHiders().length;}
+function isGameOver(){return foundCount()>=hiderCount()&&hiderCount()>0;}
+function escHtml(s=''){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function connectedPlayers(){return getPlayerList().filter(p=>p.connected!==false);}
+function calcSeekers(n){return Math.max(1,Math.min(4,Math.floor(n/5)));}
+
+// =====================================================
+// STARS
+// =====================================================
+function createStars(){
+  const c=$('stars');if(!c)return;
+  for(let i=0;i<120;i++){
+    const s=document.createElement('div');s.className='star';
+    const sz=Math.random()*2.5+.5;
+    s.style.cssText=`width:${sz}px;height:${sz}px;left:${Math.random()*100}%;top:${Math.random()*100}%;--d:${2+Math.random()*5}s;opacity:${Math.random()*.5+.1}`;
+    c.appendChild(s);
+  }
+}
+
+// =====================================================
+// EMOJI PICKER
+// =====================================================
+function initEmojiPicker(){
+  const p=$('emojiPicker');
+  EMOJIS.forEach((e,i)=>{
+    const d=document.createElement('div');
+    d.className='emoji-option'+(i===0?' selected':'');
+    d.textContent=e;
+    d.onclick=()=>{S.myEmoji=e;document.querySelectorAll('.emoji-option').forEach(x=>x.classList.remove('selected'));d.classList.add('selected');};
+    p.appendChild(d);
+  });
+}
+
+// =====================================================
+// ENV PICKER
+// =====================================================
+function initEnvPicker(){
+  const p=$('envPicker');p.innerHTML='';
+  Object.entries(ENVIRONMENTS).forEach(([key,env])=>{
+    const b=document.createElement('button');
+    b.className='env-btn'+(S.selectedEnv===key?' selected':'');
+    b.innerHTML=`<span class="env-icon">${env.name.split(' ')[0]}</span>${env.name.slice(2)}`;
+    b.onclick=()=>{
+      S.selectedEnv=key;
+      document.querySelectorAll('.env-btn').forEach(x=>x.classList.remove('selected'));
+      b.classList.add('selected');
+      if(S.isHost) publish({type:'ENV_CHANGE',env:key});
+    };
+    p.appendChild(b);
+  });
+}
+
+// =====================================================
+// PUBNUB
+// =====================================================
+function initPubNub(roomCode){
+  S.channel='hideout-v2-'+roomCode;
+  S.pubnub=new PubNub({publishKey:'demo',subscribeKey:'demo',userId:S.myId});
+  S.pubnub.addListener({
+    message:({message})=>handleMessage(message),
+    status:({category})=>{
+      if(category==='PNConnectedCategory'){
+        setConnStatus(true);
+        // Announce ourselves
+        publish({type:'PLAYER_JOIN',id:S.myId,name:S.myName,emoji:S.myEmoji,isHost:S.isHost});
+        // Start heartbeat so late joiners can discover us
+        startLobbyHeartbeat();
+      }
+    }
+  });
+  S.pubnub.subscribe({channels:[S.channel]});
+}
+
+function publish(msg){
+  if(!S.pubnub)return;
+  S.pubnub.publish({channel:S.channel,message:{...msg,_from:S.myId}});
+}
+
+function setConnStatus(ok){
+  const el=$('connStatus');if(!el)return;
+  el.textContent=ok?'✅ Connected':'⏳ Connecting…';
+  el.className='conn-status '+(ok?'conn-ok':'conn-wait');
+}
+
+// =====================================================
+// LOBBY HEARTBEAT
+// — Periodically re-announces presence so late joiners see everyone
+// =====================================================
+function startLobbyHeartbeat(){
+  if(S._heartbeat)clearInterval(S._heartbeat);
+  S._heartbeat=setInterval(()=>{
+    if(S.phase!=='lobby'){clearInterval(S._heartbeat);S._heartbeat=null;return;}
+    // Re-announce ourselves (silent, no chat message)
+    publish({type:'PLAYER_JOIN',id:S.myId,name:S.myName,emoji:S.myEmoji,isHost:S.isHost,_reannounce:true});
+    // Host also re-broadcasts the full player list
+    if(S.isHost){
+      publish({type:'LOBBY_STATE',players:S.players});
+    }
+  },4000);
+}
+
+// =====================================================
+// MESSAGE HANDLER
+// =====================================================
+function handleMessage(msg){
+  const from=msg._from;
+  switch(msg.type){
+
+    case 'PLAYER_JOIN': {
+      const isNew=!S.players[msg.id]||!S.players[msg.id].connected;
+      // Always update/add the player record
+      S.players[msg.id]={
+        name:msg.name,emoji:msg.emoji,role:null,
+        team:-1,isFound:false,score:0,connected:true,
+        isHost:msg.isHost||false,id:msg.id,
+      };
+      // Show chat only for new arrivals, not heartbeat re-announces
+      if(isNew&&!msg._reannounce) addChat('system',`${msg.emoji} ${msg.name} joined`,msg.id);
+
+      // KEY FIX: re-announce ourselves back so the new joiner discovers us
+      if(!msg._reannounce && msg.id!==S.myId){
+        publish({type:'PLAYER_JOIN',id:S.myId,name:S.myName,emoji:S.myEmoji,isHost:S.isHost,_reannounce:true});
+      }
+      // Host sends authoritative full list (debounced to batch rapid joins)
+      if(S.isHost&&S.phase==='lobby'){
+        clearTimeout(S._lobbyStateTimer);
+        S._lobbyStateTimer=setTimeout(()=>publish({type:'LOBBY_STATE',players:S.players}),500);
+      }
+      if(S.phase==='lobby') renderLobby();
+      break;
+    }
+
+    case 'LOBBY_STATE':
+      // Host's authoritative player list — merge everyone in
+      Object.entries(msg.players||{}).forEach(([id,p])=>{
+        if(id!==S.myId) S.players[id]={...p};
+      });
+      if(S.phase==='lobby') renderLobby();
+      break;
+
+    case 'PLAYER_LEAVE':
+      if(S.players[msg.id]) S.players[msg.id].connected=false;
+      if(S.phase==='lobby') renderLobby();
+      break;
+
+    case 'ENV_CHANGE':
+      S.selectedEnv=msg.env;S.environment=msg.env;
+      if(S.phase==='lobby') initEnvPicker();
+      break;
+
+    case 'GAME_START':
+      receiveGameStart(msg);
+      break;
+
+    case 'INVESTIGATE':
+      receiveInvestigate(msg);
+      break;
+
+    case 'PLAYER_FOUND':
+      receivePlayerFound(msg);
+      break;
+
+    case 'PLAYER_MOVE':
+      addChat('system',`${S.players[msg.id]?.emoji||'?'} ${S.players[msg.id]?.name||'?'} slipped away!`,msg.id);
+      break;
+
+    case 'GAME_END':
+      receiveGameEnd(msg);
+      break;
+
+    case 'CHAT':
+      addChat(msg.id===S.myId?'mine':'other',msg.text,msg.id,msg.emoji);
+      break;
+  }
+}
+
+// =====================================================
+// CREATE / JOIN ROOM
+// =====================================================
+function createRoom(){
+  const name=$('playerName').value.trim();
+  if(!name){toast('Enter your name first!');return;}
+  S.myName=name;S.myId=uid();S.isHost=true;
+  S.roomCode=roomCodeGen();
+  window.location.hash=S.roomCode;
+  S.players[S.myId]={name:S.myName,emoji:S.myEmoji,role:null,team:-1,isFound:false,score:0,connected:true,isHost:true,id:S.myId};
+  initPubNub(S.roomCode);
+  showScreen('lobby');
+  $('displayCode').textContent=S.roomCode;
+  initEnvPicker();
+  renderLobby();
+}
+
+function joinRoom(){
+  const name=$('playerName').value.trim();
+  let code=$('joinCode').value.trim().toUpperCase();
+  if(!name){toast('Enter your name first!');return;}
+  if(!code||code.length<4){toast('Enter a valid room code');return;}
+  S.myName=name;S.myId=uid();S.isHost=false;
+  S.roomCode=code;window.location.hash=code;
+  S.players[S.myId]={name:S.myName,emoji:S.myEmoji,role:null,team:-1,isFound:false,score:0,connected:true,isHost:false,id:S.myId};
+  initPubNub(S.roomCode);
+  showScreen('lobby');
+  $('displayCode').textContent=S.roomCode;
+  // Non-host can see environment choices but not change them
+  $('hostControls').style.opacity='0.5';
+  $('hostControls').style.pointerEvents='none';
+  initEnvPicker();
+  renderLobby();
+}
+
+function copyRoomLink(){
+  const link=`${location.origin}${location.pathname}#${S.roomCode}`;
+  navigator.clipboard.writeText(link).then(()=>toast('🔗 Link copied — share it in your huddle!')).catch(()=>toast('Room code: '+S.roomCode));
+}
+
+function leaveLobby(){
+  publish({type:'PLAYER_LEAVE',id:S.myId});
+  if(S._heartbeat)clearInterval(S._heartbeat);
+  if(S.pubnub)S.pubnub.unsubscribeAll();
+  window.location.hash='';
+  location.reload();
+}
+
+// =====================================================
+// LOBBY RENDER
+// =====================================================
+function renderLobby(){
+  const players=connectedPlayers();
+  const n=players.length;
+  $('playerCountLabel').textContent=`${n}/20 player${n===1?'':'s'} in room`;
+  $('playerList').innerHTML=players.map(p=>`
+    <div class="player-item">
+      <div class="player-avatar">${p.emoji}</div>
+      <div class="player-name">${escHtml(p.name)}</div>
+      ${p.isHost?'<span class="player-badge badge-host">HOST</span>':''}
+      ${p.id===S.myId?'<span class="player-badge badge-me">YOU</span>':''}
+    </div>`).join('');
+  if(S.isHost){
+    const canStart=n>=2;
+    $('startBtn').disabled=!canStart;
+    $('startHint').textContent=canStart
+      ?`${calcSeekers(n)} seeker${calcSeekers(n)>1?'s':''} will be assigned for ${n} players`
+      :'Need at least 2 players to start';
+  } else {
+    $('startBtn').style.display='none';
+    $('startHint').textContent='Waiting for the host to start…';
+  }
+}
+
+// =====================================================
+// GAME START
+// =====================================================
+function startGame(){
+  if(!S.isHost)return;
+  if(S._heartbeat){clearInterval(S._heartbeat);S._heartbeat=null;}
+  S.environment=S.selectedEnv;
+  const all=connectedPlayers();
+  const n=all.length;
+  const numSeekers=calcSeekers(n);
+  const shuffled=[...all].sort(()=>Math.random()-.5);
+  const seekerIds=shuffled.slice(0,numSeekers).map(p=>p.id);
+  const hiderIds=shuffled.slice(numSeekers).map(p=>p.id);
+  const teamSize=Math.ceil(hiderIds.length/Math.max(1,Math.ceil(hiderIds.length/4)));
+  const teams=[];
+  for(let i=0;i<hiderIds.length;i+=teamSize) teams.push(hiderIds.slice(i,i+teamSize));
+  const gameEndTime=Date.now()+(GAME_DURATION*1000);
+  publish({
+    type:'GAME_START',environment:S.environment,
+    teams,seekers:seekerIds,
+    players:Object.fromEntries(all.map(p=>[p.id,{...p}])),
+    gameEndTime,
+  });
+}
+
+function receiveGameStart(msg){
+  if(S._heartbeat){clearInterval(S._heartbeat);S._heartbeat=null;}
+  S.environment=msg.environment;
+  S.teams=msg.teams;
+  S.seekers=msg.seekers;
+  S.gameEndTime=msg.gameEndTime;
+  if(msg.players) S.players={...msg.players};
+  S.seekers.forEach(id=>{if(S.players[id])S.players[id].role='seeker';});
+  S.teams.forEach((team,ti)=>team.forEach(id=>{if(S.players[id]){S.players[id].role='hider';S.players[id].team=ti;}}));
+  S.myRole=S.seekers.includes(S.myId)?'seeker':'hider';
+  S.myTeam=S.teams.findIndex(t=>t.includes(S.myId));
+  S.mySpot=null;S.myMoves=MAX_MOVES;
+  S.investigatedSpots=msg.investigatedSpots||{};
+  S.foundPlayers=msg.foundPlayers||{};
+  S.cooldowns={};
+  document.body.className='theme-'+ENVIRONMENTS[S.environment].theme;
+  startCountdown();
+}
+
+// =====================================================
+// COUNTDOWN
+// =====================================================
+function startCountdown(){
+  S.phase='countdown';showScreen('countdown');
+  const myTeamObj=S.myTeam>=0?TEAM_COLORS[S.myTeam%TEAM_COLORS.length]:null;
+  $('roleText').innerHTML=`<div class="role-badge ${S.myRole==='hider'?'role-hider':'role-seeker'}">${S.myRole==='hider'?'🫣 YOU ARE A HIDER':'🔍 YOU ARE A SEEKER'}</div>`;
+  if(S.myRole==='hider'&&myTeamObj){
+    const mates=S.teams[S.myTeam].filter(id=>id!==S.myId).map(id=>S.players[id]).filter(Boolean).map(p=>`${p.emoji} ${p.name}`).join(', ');
+    $('teamReveal').innerHTML=`<div style="color:${myTeamObj.color};font-weight:700">${myTeamObj.name}</div>${mates?`<div style="margin-top:.3rem">With: ${escHtml(mates)}</div>`:''}`;
+  } else {
+    $('teamReveal').textContent=`Find all ${hiderCount()} hiders before time runs out!`;
+  }
+  let count=5;
+  const el=$('countNum');
+  el.textContent=count;
+  const t=setInterval(()=>{
+    count--;
+    if(count<=0){clearInterval(t);startActualGame();return;}
+    el.style.animation='none';el.offsetHeight;el.style.animation='countPulse .6s ease-in-out';
+    el.textContent=count;
+  },1000);
+}
+
+// =====================================================
+// GAME
+// =====================================================
+function startActualGame(){
+  S.phase='game';showScreen('game');
+  $('envNameDisplay').textContent=getEnv().name;
+  $('myRoleLabel').textContent=S.myRole==='seeker'?'🔍 Seeker':'🫣 Hider';
+  renderGame();
+  startTimer();
+  addChat('system',S.myRole==='seeker'?'The hunt begins! Click spots to investigate 🔍':'Pick your hiding spot fast! Seekers are coming 👀',null);
+}
+
+function startTimer(){
+  if(S.timerInterval)clearInterval(S.timerInterval);
+  S.timerInterval=setInterval(()=>{
+    const rem=Math.max(0,S.gameEndTime-Date.now());
+    const secs=Math.ceil(rem/1000);
+    const m=Math.floor(secs/60),s=secs%60;
+    $('timerDisplay').textContent=`${m}:${s.toString().padStart(2,'0')}`;
+    $('timerDisplay').classList.toggle('urgent',secs<=30);
+    if(rem===0){clearInterval(S.timerInterval);if(S.isHost)endGame();}
+  },500);
+}
+
+// =====================================================
+// RENDER GAME
+// =====================================================
+function renderGame(){
+  const env=getEnv();
+  const body=$('gameBody');
+  $('foundCount').textContent=foundCount();
+  $('hiderCount').textContent=hiderCount();
+  let html='<div style="width:100%">';
+  if(S.myRole==='hider'){
+    if(!S.mySpot){
+      html+=`<div style="text-align:center;margin-bottom:.75rem;color:var(--accent);font-weight:700;font-size:1rem">🎯 Pick your hiding spot! (${env.spots.length} options)</div>`;
+    } else {
+      html+=buildHiderStatus();
+    }
+  } else {
+    html+=`<div class="seeker-tip">🔍 Click any spot to investigate it! Found <strong>${foundCount()}</strong> of <strong>${hiderCount()}</strong> hiders</div><div style="margin:.5rem 0"></div>`;
+  }
+  html+=`<div class="spots-grid" id="spotsGrid">`;
+  env.spots.forEach(spot=>{html+=buildSpotCard(spot);});
+  html+=`</div></div>`;
+  html+=buildTeamsPanel();
+  html+=`<div class="chat-panel" id="chatPanel">
+    <div class="chat-header">💬 Game Chat</div>
+    <div class="chat-messages" id="chatMessages"></div>
+    <div class="chat-input-row">
+      <input class="chat-input" id="chatInput" placeholder="Say something…" maxlength="80" onkeydown="if(event.key==='Enter')sendChat()">
+      <button class="btn btn-secondary" style="padding:.4rem .75rem;font-size:.85rem" onclick="sendChat()">Send</button>
+    </div>
+  </div>`;
+  body.innerHTML=html;
+  renderChatMessages();
+  if(S.myRole==='seeker'){
+    document.querySelectorAll('.spot-card[data-spot]').forEach(el=>el.onclick=()=>investigateSpot(el.dataset.spot));
+    startCooldownRefresh();
+  } else {
+    document.querySelectorAll('.spot-card[data-spot]').forEach(el=>{
+      if(!S.mySpot||S.mySpot!==el.dataset.spot) el.onclick=()=>chooseSpot(el.dataset.spot);
+    });
+  }
+}
+
+function buildSpotCard(spot){
+  const investigated=S.investigatedSpots[spot.id];
+  const foundHere=Object.values(S.foundPlayers).filter(f=>f.spotId===spot.id);
+  const isMySpot=S.mySpot===spot.id;
+  const cd=S.cooldowns[spot.id]&&S.cooldowns[spot.id]>Date.now()?Math.ceil((S.cooldowns[spot.id]-Date.now())/1000):0;
+  let cls='spot-card';
+  if(isMySpot)cls+=' my-spot';
+  if(investigated)cls+=' investigated';
+  let badge='';
+  if(isMySpot)badge='<span class="spot-badge spot-badge-hiding">🫣 You</span>';
+  else if(foundHere.length>0)badge=`<span class="spot-badge spot-badge-found">Found ${foundHere.length}</span>`;
+  else if(investigated)badge='<span class="spot-badge spot-badge-checked">✓ Checked</span>';
+  return `<div class="${cls}" data-spot="${spot.id}" title="${spot.desc}">
+    ${badge}
+    <div class="spot-icon">${spot.icon}</div>
+    <div class="spot-name">${spot.name}</div>
+    <div class="spot-desc">${spot.desc}</div>
+    ${cd>0?`<div class="spot-cooldown">⏳ ${cd}s</div>`:''}
+  </div>`;
+}
+
+function buildHiderStatus(){
+  if(!S.mySpot)return'';
+  const spot=spotById(S.mySpot);
+  return `<div class="hider-status">
+    <div class="your-spot-info">
+      <div class="your-spot-icon">${spot.icon}</div>
+      <div class="your-spot-text">
+        <div style="color:var(--muted);font-size:.75rem">YOU ARE HIDING IN</div>
+        <div class="your-spot-name">${spot.name}</div>
+      </div>
+    </div>
+    <button class="btn btn-secondary" style="font-size:.8rem;padding:.4rem .8rem" onclick="moveSpot()" ${S.myMoves<=0?'disabled':''}>
+      🏃 Move (${S.myMoves} left)
+    </button>
+  </div>`;
+}
+
+function buildTeamsPanel(){
+  let html='<div class="teams-panel">';
+  const seekerPlayers=getSeekers();
+  if(seekerPlayers.length){
+    html+=`<div class="team-card" style="border-color:rgba(245,158,11,.4)">
+      <div class="team-header" style="color:var(--accent)">🔍 Seekers</div>
+      <div class="team-members">${seekerPlayers.map(p=>`
+        <div class="member-row"><div class="status-dot dot-seeker"></div>
+        <span>${p.emoji} ${escHtml(p.name)}${p.id===S.myId?' (you)':''}</span></div>`).join('')}
+      </div>
+    </div>`;
+  }
+  S.teams.forEach((team,ti)=>{
+    const tc=TEAM_COLORS[ti%TEAM_COLORS.length];
+    const members=team.map(id=>S.players[id]).filter(Boolean);
+    if(!members.length)return;
+    html+=`<div class="team-card" style="border-color:${tc.color}40">
+      <div class="team-header" style="color:${tc.color}">${tc.name}</div>
+      <div class="team-members">${members.map(p=>{
+        const found=!!S.foundPlayers[p.id];
+        return `<div class="member-row"><div class="status-dot ${found?'dot-found':'dot-safe'}"></div>
+          <span style="${found?'text-decoration:line-through;opacity:.5':''}">${p.emoji} ${escHtml(p.name)}${p.id===S.myId?' (you)':''}</span></div>`;
+      }).join('')}</div>
+    </div>`;
+  });
+  return html+'</div>';
+}
+
+// =====================================================
+// SPOT ACTIONS
+// =====================================================
+function chooseSpot(spotId){
+  if(S.myRole!=='hider')return;
+  if(S.investigatedSpots[spotId]){toast('⚠️ That spot was already investigated!');return;}
+  S.mySpot=spotId;
+  addChat('system',`You hid in the ${spotById(spotId).name}!`,null);
+  renderGame();
+}
+
+function moveSpot(){
+  if(S.myMoves<=0||S.myRole!=='hider')return;
+  S.myMoves--;S.mySpot=null;
+  publish({type:'PLAYER_MOVE',id:S.myId});
+  renderGame();
+  toast('🏃 Pick a new spot to hide!');
+}
+
+function investigateSpot(spotId){
+  if(S.myRole!=='seeker')return;
+  const now=Date.now();
+  if(S.cooldowns[spotId]&&S.cooldowns[spotId]>now){toast(`⏳ Wait ${Math.ceil((S.cooldowns[spotId]-now)/1000)}s`);return;}
+  S.cooldowns[spotId]=now+(INVESTIGATE_COOLDOWN*1000);
+  const card=document.querySelector(`[data-spot="${spotId}"]`);
+  if(card){card.classList.add('checking');setTimeout(()=>card.classList.remove('checking'),800);}
+  publish({type:'INVESTIGATE',spotId,seekerId:S.myId,ts:now});
+  setTimeout(()=>{if(S.phase==='game')renderGame();},INVESTIGATE_COOLDOWN*1000+100);
+}
+
+function receiveInvestigate(msg){
+  S.investigatedSpots[msg.spotId]={by:msg.seekerId,at:msg.ts};
+  // If I'm a hider hiding here — auto-reveal myself
+  if(S.myRole==='hider'&&S.mySpot===msg.spotId&&!S.foundPlayers[S.myId]){
+    publish({type:'PLAYER_FOUND',playerId:S.myId,spotId:msg.spotId,foundBy:msg.seekerId});
+  }
+  if(S.phase==='game')renderGame();
+}
+
+function receivePlayerFound(msg){
+  S.foundPlayers[msg.playerId]={spotId:msg.spotId,by:msg.foundBy};
+  if(S.players[msg.playerId])S.players[msg.playerId].isFound=true;
+  if(S.players[msg.foundBy])S.players[msg.foundBy].score=(S.players[msg.foundBy].score||0)+20;
+  const foundP=S.players[msg.playerId];
+  const seeker=S.players[msg.foundBy];
+  const spot=spotById(msg.spotId);
+  if(foundP){
+    addChat('system',`🎯 ${seeker?.name||'?'} found ${foundP.emoji} ${foundP.name} in the ${spot?.name||'?'}!`,null);
+    if(msg.playerId===S.myId)showFoundAnimation('YOU were found! 😱',foundP.emoji);
+    else if(msg.foundBy===S.myId)showFoundAnimation(`Found ${foundP.name}! 🎯`,foundP.emoji);
+  }
+  if(S.phase==='game')renderGame();
+  if(S.isHost&&isGameOver())setTimeout(endGame,1500);
+}
+
+function showFoundAnimation(text,emoji){
+  const fl=document.createElement('div');fl.className='found-flash';document.body.appendChild(fl);setTimeout(()=>fl.remove(),700);
+  const p=document.createElement('div');p.className='found-popup';
+  p.innerHTML=`<h2>${text}</h2><div class="found-player">${emoji}</div>`;
+  document.body.appendChild(p);setTimeout(()=>p.remove(),2200);
+}
+
+let cooldownInterval=null;
+function startCooldownRefresh(){
+  if(cooldownInterval)clearInterval(cooldownInterval);
+  cooldownInterval=setInterval(()=>{
+    const grid=$('spotsGrid');if(!grid){clearInterval(cooldownInterval);return;}
+    const now=Date.now();
+    getEnv().spots.forEach(spot=>{
+      const card=grid.querySelector(`[data-spot="${spot.id}"]`);if(!card)return;
+      let ov=card.querySelector('.spot-cooldown');
+      const rem=S.cooldowns[spot.id]&&S.cooldowns[spot.id]>now?Math.ceil((S.cooldowns[spot.id]-now)/1000):0;
+      if(rem>0){if(!ov){ov=document.createElement('div');ov.className='spot-cooldown';card.appendChild(ov);}ov.textContent=`⏳ ${rem}s`;}
+      else if(ov)ov.remove();
+    });
+  },1000);
+}
+
+// =====================================================
+// END GAME
+// =====================================================
+function endGame(){
+  if(S.isHost){
+    const timeBonus=Math.round(Math.max(0,(S.gameEndTime-Date.now())/1000)/60)*5;
+    getHiders().forEach(p=>{if(!p.isFound)S.players[p.id].score=(S.players[p.id].score||0)+50+timeBonus;});
+    publish({type:'GAME_END',players:S.players,foundPlayers:S.foundPlayers});
+  }
+}
+
+function receiveGameEnd(msg){
+  clearInterval(S.timerInterval);clearInterval(cooldownInterval);
+  S.phase='results';
+  S.players=msg.players||S.players;
+  S.foundPlayers=msg.foundPlayers||S.foundPlayers;
+  showResults();
+}
+
+// =====================================================
+// RESULTS
+// =====================================================
+function showResults(){
+  showScreen('results');
+  const total=hiderCount(),found=foundCount(),hidersWin=found<total;
+  $('resultsEmoji').textContent=hidersWin?'🫣':'🔍';
+  $('resultsTitle').textContent=hidersWin?'Hiders Win!':'Seekers Win!';
+  const b=$('winnerBanner');
+  b.className='winner-banner '+(hidersWin?'winner-hiders':'winner-seekers');
+  b.textContent=hidersWin?`🎉 ${total-found} hider${total-found===1?'':'s'} stayed hidden!`:`🎯 All ${total} hiders were found!`;
+  const sorted=getPlayerList().sort((a,b)=>(b.score||0)-(a.score||0));
+  const medals=['🥇','🥈','🥉'];
+  $('scoresList').innerHTML=sorted.map((p,i)=>`
+    <div class="score-row">
+      <div class="score-rank">${medals[i]||`${i+1}`}</div>
+      <div class="player-avatar">${p.emoji}</div>
+      <div class="score-name">${escHtml(p.name)}${p.id===S.myId?' <span style="color:var(--muted);font-size:.75rem">(you)</span>':''}</div>
+      <div>
+        <div class="score-points">${p.score||0} pts</div>
+        <div class="score-detail">${p.role==='seeker'?'🔍 Seeker':'🫣 Hider'} ${p.role==='hider'?(S.foundPlayers[p.id]?'😵 Found':'😎 Hidden'):''}</div>
+      </div>
+    </div>`).join('');
+}
+
+function playAgain(){
+  if(!S.isHost){toast('Only the host can restart');return;}
+  S.foundPlayers={};S.investigatedSpots={};S.cooldowns={};
+  getPlayerList().forEach(p=>{p.isFound=false;p.role=null;p.team=-1;p.score=0;});
+  S.phase='lobby';showScreen('lobby');
+  renderLobby();
+  startLobbyHeartbeat();
+}
+
+function goHome(){
+  publish({type:'PLAYER_LEAVE',id:S.myId});
+  if(S._heartbeat)clearInterval(S._heartbeat);
+  if(S.pubnub)S.pubnub.unsubscribeAll();
+  window.location.hash='';location.reload();
+}
+
+// =====================================================
+// CHAT
+// =====================================================
+function addChat(type,text,fromId,emoji){
+  const p=fromId&&S.players[fromId]?S.players[fromId]:null;
+  S.chatMessages.push({type,text,fromId,emoji:emoji||(p?.emoji||''),name:p?.name||''});
+  if(S.chatMessages.length>80)S.chatMessages.shift();
+  renderChatMessages();
+}
+
+function renderChatMessages(){
+  const el=$('chatMessages');if(!el)return;
+  el.innerHTML=S.chatMessages.map(m=>{
+    if(m.type==='system')return`<div class="chat-msg system"><span class="who">🔔</span><span>${escHtml(m.text)}</span></div>`;
+    return`<div class="chat-msg ${m.type==='mine'?'mine':'other'}"><span class="who">${m.emoji} ${escHtml(m.name)}:</span><span>${escHtml(m.text)}</span></div>`;
+  }).join('');
+  el.scrollTop=el.scrollHeight;
+}
+
+function sendChat(){
+  const inp=$('chatInput');const text=inp?.value?.trim();
+  if(!text||!S.pubnub)return;
+  inp.value='';
+  publish({type:'CHAT',id:S.myId,text,emoji:S.myEmoji});
+  addChat('mine',text,S.myId,S.myEmoji);
+}
+
+// =====================================================
+// INIT
+// =====================================================
+function init(){
+  createStars();
+  initEmojiPicker();
+  const hash=window.location.hash.slice(1).toUpperCase();
+  if(hash&&hash.length>=4&&hash.length<=8)$('joinCode').value=hash;
+  $('playerName').addEventListener('keydown',e=>{if(e.key==='Enter'){const c=$('joinCode').value.trim();if(c)joinRoom();else createRoom();}});
+  $('joinCode').addEventListener('keydown',e=>{if(e.key==='Enter')joinRoom();});
+  $('joinCode').addEventListener('input',e=>{e.target.value=e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,'');});
+  window.addEventListener('beforeunload',()=>{if(S.pubnub)publish({type:'PLAYER_LEAVE',id:S.myId});});
+}
+init();
+</script>
+</body>
+</html>
